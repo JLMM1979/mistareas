@@ -1,5 +1,8 @@
 [[redirects]]
   from = "/notion/*"
-  to = "/.netlify/functions/notion"
+  to = "/.netlify/functions/notion/:splat"
   status = 200
   force = true
+
+[functions]
+  directory = "netlify/functions"
