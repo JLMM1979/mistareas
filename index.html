@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Mis Tareas</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',sans-serif;background:#f1f5f9;min-height:100vh;padding:1.5rem 1rem}
+  #app{max-width:700px;margin:0 auto}
+  h1{font-size:1.6rem;font-weight:700;color:#1e293b}
+  .subtitle{color:#64748b;font-size:.9rem;margin-top:.2rem}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:.5rem;margin-bottom:1.5rem}
+  .badge{font-size:.78rem;padding:4px 10px;border-radius:99px;font-weight:600}
+  .card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:1rem;margin-bottom:1rem;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+  .form-row{display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+  .form-row input[type=text]{flex:1;min-width:160px;padding:.5rem .75rem;border-radius:8px;border:1px solid #cbd5e1;font-size:.95rem;outline:none}
+  .form-row input[type=date],select{padding:.5rem;border-radius:8px;border:1px solid #cbd5e1;font-size:.85rem}
+  .btn-row{display:flex;gap:8px}
+  .btn-primary{flex:1;padding:.5rem;border-radius:8px;border:none;background:#3b82f6;color:#fff;font-weight:600;cursor:pointer;font-size:.9rem}
+  .btn-secondary{padding:.5rem 1rem;border-radius:8px;border:1px solid #cbd5e1;background:#f8fafc;cursor:pointer;font-size:.9rem}
+  .filters{display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap;align-items:center}
+  .filters select{padding:.4rem .6rem;font-size:.83rem}
+  .btn-clear{margin-left:auto;padding:.4rem .7rem;border-radius:8px;border:1px solid #fca5a5;background:#fef2f2;color:#ef4444;cursor:pointer;font-size:.82rem}
+  .task-list{display:flex;flex-direction:column;gap:8px}
+  .task{display:flex;align-items:flex-start;gap:10px;background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:.75rem 1rem;transition:opacity .2s}
+  .task.done{opacity:.65;background:#f8fafc}
+  .task.overdue{border-color:#fca5a5;box-shadow:0 0 0 2px #fca5a540}
+  .task input[type=checkbox]{margin-top:3px;width:16px;height:16px;cursor:pointer}
+  .task-body{flex:1;min-width:0}
+  .task-text{font-weight:500;color:#1e293b;word-break:break-word}
+  .task-text.done{text-decoration:line-through;color:#94a3b8}
+  .task-meta{display:flex;gap:6px;margin-top:5px;flex-wrap:wrap;align-items:center}
+  .tag{font-size:.72rem;font-weight:700;padding:1px 7px;border-radius:99px}
+  .task-actions{display:flex;gap:4px;flex-shrink:0}
+  .task-actions button{border:none;background:none;cursor:pointer;font-size:1rem;padding:2px 4px;border-radius:6px;color:#94a3b8}
+  .empty{text-align:center;color:#94a3b8;padding:2rem;font-size:.95rem}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="header">
+    <div>
+      <h1>📋 Mis Tareas</h1>
+      <p class="subtitle" id="subtitle">Cargando…</p>
+    </div>
+    <span class="badge" id="status-badge" style="background:#64748b18;color:#64748b">⏳ Cargando…</span>
+  </div>
+
+  <div class="card">
+    <div class="form-row">
+      <input type="text" id="task-input" placeholder="Nueva tarea…" onkeydown="if(event.key==='Enter')addOrEdit()"/>
+      <select id="priority-sel" onchange="updatePriorityStyle()">
+        <option value="alta">Alta</option>
+        <option value="media" selected>Media</option>
+        <option value="baja">Baja</option>
+      </select>
+      <select id="category-sel">
+        <option>Personal</option><option>Trabajo</option><option>Docencia</option>
+        <option>Arquitectura</option><option>Máster</option><option>Novela</option><option>Otro</option>
+      </select>
+      <input type="date" id="due-input"/>
+    </div>
+    <div class="btn-row">
+      <button class="btn-primary" id="submit-btn" onclick="addOrEdit()">➕ Añadir tarea</button>
+      <button class="btn-secondary" id="cancel-btn" style="display:none" onclick="cancelEdit()">Cancelar</button>
+    </div>
+  </div>
+
+  <div class="filters">
+    <select id="f-done" onchange="render()">
+      <option value="pendientes">Pendientes</option>
+      <option value="completadas">Completadas</option>
+      <option value="todas">Todas</option>
+    </select>
+    <select id="f-priority" onchange="render()">
+      <option value="todas">Todas las prioridades</option>
+      <option value="alta">Alta</option>
+      <option value="media">Media</option>
+      <option value="baja">Baja</option>
+    </select>
+    <select id="f-category" onchange="render()">
+      <option value="todas">Todas las categorías</option>
+      <option>Personal</option><option>Trabajo</option><option>Docencia</option>
+      <option>Arquitectura</option><option>Máster</option><option>Novela</option><option>Otro</option>
+    </select>
+    <button class="btn-clear" id="clear-btn" style="display:none" onclick="clearDone()">🗑 Limpiar completadas</button>
+  </div>
+
+  <div class="task-list" id="task-list"><div class="empty">⏳ Cargando tareas…</div></div>
+</div>
+
+<script>
+const DB_ID = '35618efcb6b38028b656fe7103906826';
+
+const PRIORITIES = {
+  alta:  {label:'Alta',  color:'#ef4444', bg:'#fef2f2'},
+  media: {label:'Media', color:'#f59e0b', bg:'#fffbeb'},
+  baja:  {label:'Baja',  color:'#22c55e', bg:'#f0fdf4'},
+};
+const CAT_COLORS = {
+  Personal:'#8b5cf6',Trabajo:'#3b82f6',Docencia:'#f59e0b',
+  Arquitectura:'#ef4444','Máster':'#14b8a6',Novela:'#ec4899',Otro:'#6b7280'
+};
+
+let tasks = [], editId = null;
+
+async function notionFetch(path, opts={}) {
+  const res = await fetch('/notion' + path, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', ...opts.headers }
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+async function loadTasks() {
+  setStatus('loading');
+  try {
+    const data = await notionFetch(`/v1/databases/${DB_ID}/query`, {
+      method: 'POST',
+      body: JSON.stringify({ sorts: [{ property: 'created', direction: 'descending' }] })
+    });
+    tasks = data.results.map(pageToTask);
+    setStatus('ready');
+    render();
+  } catch(e) { setStatus('error'); console.error(e); }
+}
+
+function pageToTask(page) {
+  const p = page.properties;
+  return {
+    id: page.id,
+    text: p.Name?.title?.[0]?.plain_text || '',
+    priority: p.priority?.select?.name || 'media',
+    category: p.category?.select?.name || 'Personal',
+    due: p.due?.date?.start || '',
+    done: p.done?.checkbox || false,
+    created: p.created?.date?.start || page.created_time,
+  };
+}
+
+async function createTask(t) {
+  return notionFetch('/v1/pages', {
+    method: 'POST',
+    body: JSON.stringify({
+      parent: { database_id: DB_ID },
+      properties: taskToProps(t)
+    })
+  });
+}
+
+async function updateTask(id, t) {
+  return notionFetch(`/v1/pages/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ properties: taskToProps(t) })
+  });
+}
+
+async function archiveTask(id) {
+  return notionFetch(`/v1/pages/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ archived: true })
+  });
+}
+
+function taskToProps(t) {
+  const props = {
+    Name:     { title: [{ text: { content: t.text } }] },
+    priority: { select: { name: t.priority } },
+    category: { select: { name: t.category } },
+    done:     { checkbox: t.done },
+    created:  { date: { start: t.created || new Date().toISOString() } },
+  };
+  if (t.due) props.due = { date: { start: t.due } };
+  else props.due = { date: null };
+  return props;
+}
+
+async function addOrEdit() {
+  const text = document.getElementById('task-input').value.trim();
+  if (!text) return;
+  const t = {
+    text,
+    priority: document.getElementById('priority-sel').value,
+    category: document.getElementById('category-sel').value,
+    due: document.getElementById('due-input').value,
+    done: false,
+    created: new Date().toISOString()
+  };
+  setStatus('saving');
+  try {
+    if (editId) {
+      const existing = tasks.find(x => x.id === editId);
+      t.done = existing.done;
+      t.created = existing.created;
+      await updateTask(editId, t);
+      tasks = tasks.map(x => x.id === editId ? { ...t, id: editId } : x);
+      editId = null;
+      document.getElementById('submit-btn').textContent = '➕ Añadir tarea';
+      document.getElementById('cancel-btn').style.display = 'none';
+    } else {
+      const page = await createTask(t);
+      tasks.unshift({ ...t, id: page.id });
+    }
+    document.getElementById('task-input').value = '';
+    document.getElementById('due-input').value = '';
+    setStatus('ready');
+    render();
+    document.getElementById('task-input').focus();
+  } catch(e) { setStatus('error'); console.error(e); }
+}
+
+function cancelEdit() {
+  editId = null;
+  document.getElementById('task-input').value = '';
+  document.getElementById('due-input').value = '';
+  document.getElementById('submit-btn').textContent = '➕ Añadir tarea';
+  document.getElementById('cancel-btn').style.display = 'none';
+}
+
+async function toggleTask(id) {
+  const t = tasks.find(x => x.id === id);
+  t.done = !t.done;
+  tasks = tasks.map(x => x.id === id ? t : x);
+  render();
+  try { await updateTask(id, t); setStatus('ready'); }
+  catch(e) { setStatus('error'); }
+}
+
+async function deleteTask(id) {
+  tasks = tasks.filter(x => x.id !== id);
+  render();
+  try { await archiveTask(id); setStatus('ready'); }
+  catch(e) { setStatus('error'); }
+}
+
+function startEdit(id) {
+  const t = tasks.find(x => x.id === id);
+  editId = id;
+  document.getElementById('task-input').value = t.text;
+  document.getElementById('priority-sel').value = t.priority;
+  document.getElementById('category-sel').value = t.category;
+  document.getElementById('due-input').value = t.due || '';
+  document.getElementById('submit-btn').textContent = '✏️ Guardar cambios';
+  document.getElementById('cancel-btn').style.display = 'inline-block';
+  document.getElementById('task-input').focus();
+  updatePriorityStyle();
+}
+
+async function clearDone() {
+  const done = tasks.filter(t => t.done);
+  tasks = tasks.filter(t => !t.done);
+  render();
+  try {
+    await Promise.all(done.map(t => archiveTask(t.id)));
+    setStatus('ready');
+  } catch(e) { setStatus('error'); }
+}
+
+function setStatus(s) {
+  const b = document.getElementById('status-badge');
+  const map = {
+    loading: ['⏳ Cargando…','#64748b'],
+    saving:  ['💾 Guardando…','#f59e0b'],
+    ready:   ['✅ Sincronizado','#22c55e'],
+    error:   ['❌ Error','#ef4444'],
+  };
+  const [text, color] = map[s];
+  b.textContent
