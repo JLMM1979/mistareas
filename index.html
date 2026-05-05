@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Mis Tareas</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',sans-serif;background:#f1f5f9;min-height:100vh;padding:1.5rem 1rem}
+  #app{max-width:700px;margin:0 auto}
+  h1{font-size:1.6rem;font-weight:700;color:#1e293b}
+  .subtitle{color:#64748b;font-size:.9rem;margin-top:.2rem}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:.5rem;margin-bottom:1.5rem}
+  .badge{font-size:.78rem;padding:4px 10px;border-radius:99px;font-weight:600}
+  #login-btn{background:#3b82f6;color:#fff;border:none;padding:.6rem 1.2rem;border-radius:8px;cursor:pointer;font-size:.95rem;font-weight:600}
+  #login-section{text-align:center;padding:3rem 1rem;background:#fff;border-radius:12px;border:1px solid #e2e8f0}
+  #login-section p{color:#64748b;margin-bottom:1rem}
+  .card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:1rem;margin-bottom:1rem;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+  .form-row{display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+  .form-row input[type=text]{flex:1;min-width:160px;padding:.5rem .75rem;border-radius:8px;border:1px solid #cbd5e1;font-size:.95rem;outline:none}
+  .form-row input[type=date],select{padding:.5rem;border-radius:8px;border:1px solid #cbd5e1;font-size:.85rem}
+  .btn-row{display:flex;gap:8px}
+  .btn-primary{flex:1;padding:.5rem;border-radius:8px;border:none;background:#3b82f6;color:#fff;font-weight:600;cursor:pointer;font-size:.9rem}
+  .btn-secondary{padding:.5rem 1rem;border-radius:8px;border:1px solid #cbd5e1;background:#f8fafc;cursor:pointer;font-size:.9rem}
+  .filters{display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap;align-items:center}
+  .filters select{padding:.4rem .6rem;font-size:.83rem}
+  .btn-clear{margin-left:auto;padding:.4rem .7rem;border-radius:8px;border:1px solid #fca5a5;background:#fef2f2;color:#ef4444;cursor:pointer;font-size:.82rem}
+  .task-list{display:flex;flex-direction:column;gap:8px}
+  .task{display:flex;align-items:flex-start;gap:10px;background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:.75rem 1rem;transition:opacity .2s}
+  .task.done{opacity:.65;background:#f8fafc}
+  .task.overdue{border-color:#fca5a5;box-shadow:0 0 0 2px #fca5a540}
+  .task input[type=checkbox]{margin-top:3px;width:16px;height:16px;cursor:pointer}
+  .task-body{flex:1;min-width:0}
+  .task-text{font-weight:500;color:#1e293b;word-break:break-word}
+  .task-text.done{text-decoration:line-through;color:#94a3b8}
+  .task-meta{display:flex;gap:6px;margin-top:5px;flex-wrap:wrap;align-items:center}
+  .tag{font-size:.72rem;font-weight:700;padding:1px 7px;border-radius:99px}
+  .task-actions{display:flex;gap:4px;flex-shrink:0}
+  .task-actions button{border:none;background:none;cursor:pointer;font-size:1rem;padding:2px 4px;border-radius:6px;color:#94a3b8}
+  .empty{text-align:center;color:#94a3b8;padding:2rem;font-size:.95rem}
+  #logout-btn{background:none;border:1px solid #cbd5e1;padding:.3rem .7rem;border-radius:8px;cursor:pointer;font-size:.8rem;color:#64748b}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="login-section">
+    <p>Inicia sesión con Google para acceder a tus tareas</p>
+    <button id="login-btn" onclick="signIn()">🔐 Iniciar sesión con Google</button>
+  </div>
+  <div id="main-section" style="display:none">
+    <div class="header">
+      <div>
+        <h1>📋 Mis Tareas</h1>
+        <p class="subtitle" id="subtitle">0 pendientes · 0 total</p>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span class="badge" id="status-badge">⏳ Cargando…</span>
+        <button id="logout-btn" onclick="signOut()">Cerrar sesión</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="form-row">
+        <input type="text" id="task-input" placeholder="Nueva tarea…" onkeydown="if(event.key==='Enter')addOrEdit()"/>
+        <select id="priority-sel" onchange="updatePriorityStyle()">
+          <option value="alta">Alta</option>
+          <option value="media" selected>Media</option>
+          <option value="baja">Baja</option>
+        </select>
+        <select id="category-sel">
+          <option>Personal</option><option>Trabajo</option><option>Docencia</option>
+          <option>Arquitectura</option><option>Máster</option><option>Novela</option><option>Otro</option>
+        </select>
+        <input type="date" id="due-input"/>
+      </div>
+      <div class="btn-row">
+        <button class="btn-primary" id="submit-btn" onclick="addOrEdit()">➕ Añadir tarea</button>
+        <button class="btn-secondary" id="cancel-btn" style="display:none" onclick="cancelEdit()">Cancelar</button>
+      </div>
+    </div>
+
+    <div class="filters">
+      <select id="f-done" onchange="render()">
+        <option value="pendientes">Pendientes</option>
+        <option value="completadas">Completadas</option>
+        <option value="todas">Todas</option>
+      </select>
+      <select id="f-priority" onchange="render()">
+        <option value="todas">Todas las prioridades</option>
+        <option value="alta">Alta</option>
+        <option value="media">Media</option>
+        <option value="baja">Baja</option>
+      </select>
+      <select id="f-category" onchange="render()">
+        <option value="todas">Todas las categorías</option>
+        <option>Personal</option><option>Trabajo</option><option>Docencia</option>
+        <option>Arquitectura</option><option>Máster</option><option>Novela</option><option>Otro</option>
+      </select>
+      <button class="btn-clear" id="clear-btn" style="display:none" onclick="clearDone()">🗑 Limpiar completadas</button>
+    </div>
+
+    <div class="task-list" id="task-list"></div>
+  </div>
+</div>
+
+<script>
+const CLIENT_ID = '957915120062-0flngfor6pe00cneuqh0k1rpg4ed9j7f.apps.googleusercontent.com';
+const SCOPES = 'https://www.googleapis.com/auth/drive.appdata';
+const FILE_NAME = 'tareas_jlmm.json';
+
+const PRIORITIES = {
+  alta:  {label:'Alta',  color:'#ef4444', bg:'#fef2f2'},
+  media: {label:'Media', color:'#f59e0b', bg:'#fffbeb'},
+  baja:  {label:'Baja',  color:'#22c55e', bg:'#f0fdf4'},
+};
+const CAT_COLORS = {
+  Personal:'#8b5cf6',Trabajo:'#3b82f6',Docencia:'#f59e0b',
+  Arquitectura:'#ef4444','Máster':'#14b8a6',Novela:'#ec4899',Otro:'#6b7280'
+};
+
+let tokenClient, accessToken, tasks=[], fileId=null, editId=null;
+
+function signIn() {
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    callback: async (resp) => {
+      if (resp.error) return;
+      accessToken = resp.access_token;
+      document.getElementById('login-section').style.display = 'none';
+      document.getElementById('main-section').style.display = 'block';
+      await loadTasks();
+    }
+  });
+  tokenClient.requestAccessToken();
+}
+
+function signOut() {
+  google.accounts.oauth2.revoke(accessToken, () => {
+    accessToken = null; tasks = []; fileId = null;
+    document.getElementById('main-section').style.display = 'none';
+    document.getElementById('login-section').style.display = 'block';
+  });
+}
+
+function setStatus(s) {
+  const b = document.getElementById('status-badge');
+  const map = {
+    loading: ['⏳ Cargando…','#64748b'],
+    saving:  ['💾 Guardando…','#f59e0b'],
+    ready:   ['✅ Sincronizado','#22c55e'],
+    error:   ['❌ Error','#ef4444'],
+  };
+  const [text, color] = map[s];
+  b.textContent = text;
+  b.style.background = color+'18';
+  b.style.color = color;
+}
+
+async function apiFetch(url, opts={}) {
+  const res = await fetch(url, {
+    ...opts,
+    headers: { Authorization: 'Bearer '+accessToken, ...opts.headers }
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+async function loadTasks() {
+  setStatus('loading');
+  try {
+    const list = await apiFetch(
+      'https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name%3D%22'+FILE_NAME+'"'
+    );
+    if (list.files && list.files.length > 0) {
+      fileId = list.files[0].id;
+      const res = await fetch(
+        'https://www.googleapis.com/drive/v3/files/'+fileId+'?alt=media',
+        { headers: { Authorization: 'Bearer '+accessToken } }
+      );
+      tasks = await res.json();
+    } else {
+      tasks = [];
+      await createFile();
+    }
+    setStatus('ready');
+    render();
+  } catch(e) { setStatus('error'); console.error(e); }
+}
+
+async function createFile() {
+  const meta = JSON.stringify({ name: FILE_NAME, parents: ['appDataFolder'] });
+  const body = JSON.stringify([]);
+  const form = new FormData();
+  form.append('metadata', new Blob([meta], {type:'application/json'}));
+  form.append('file', new Blob([body], {type:'application/json'}));
+  const res = await fetch(
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+    { method:'POST', headers:{Authorization:'Bearer '+accessToken}, body:form }
+  );
+  const data = await res.json();
+  fileId = data.id;
+}
+
+async function saveTasks() {
+  setStatus('saving');
+  try {
+    const body = JSON.stringify(tasks, null, 2);
+    if (!fileId) await createFile();
+    await fetch(
+      'https://www.googleapis.com/upload/drive/v3/files/'+fileId+'?uploadType=media',
+      { method:'PATCH', headers:{Authorization:'Bearer '+accessToken,'Content-Type':'application/json'}, body }
+    );
+    setStatus('ready');
+  } catch(e) { setStatus('error'); console.error(e); }
+}
+
+function addOrEdit() {
+  const text = document.getElementById('task-input').value.trim();
+  if (!text) return;
+  const priority = document.getElementById('priority-sel').value;
+  const category = document.getElementById('category-sel').value;
+  const due = document.getElementById('due-input').value;
+  if (editId !== null) {
+    tasks = tasks.map(t => t.id===editId ? {...t,text,priority,category,due} : t);
+    editId = null;
+    document.getElementById('submit-btn').textContent = '➕ Añadir tarea';
+    document.getElementById('cancel-btn').style.display = 'none';
+  } else {
+    tasks.push({ id: Date.now(), text, priority, category, due, done:false, created:new Date().toISOString() });
+  }
+  document.getElementById('task-input').value = '';
+  document.getElementById('due-input').value = '';
+  saveTasks(); render();
+  document.getElementById('task-input').focus();
+}
+
+function cancelEdit() {
+  editId = null;
+  document.getElementById('task-input').value = '';
+  document.getElementById('due-input').value = '';
+  document.getElementById('submit-btn').textContent = '➕ Añadir tarea';
+  document.getElementById('cancel-btn').style.display = 'none';
+}
+
+function toggleTask(id) {
+  tasks = tasks.map(t => t.id===id ? {...t,done:!t.done} : t);
+  saveTasks(); render();
+}
+
+function deleteTask(id) {
+  tasks = tasks.filter(t => t.id!==id);
+  saveTasks(); render();
+}
+
+function startEdit(id) {
+  const t = tasks.find(t=>t.id===id);
+  editId = id;
+  document.getElementById('task-input').value = t.text;
+  document.getElementById('priority-sel').value = t.priority;
+  document.getElementById('category-sel').value = t.category;
+  document.getElementById('due-input').value = t.due||'';
+  document.getElementById('submit-btn').textContent = '✏️ Guardar cambios';
+  document.getElementById('cancel-btn').style.display = 'inline-block';
+  document.getElementById('task-input').focus();
+  updatePriorityStyle();
+}
+
+function clearDone() {
+  tasks = tasks.filter(t=>!t.done);
+  saveTasks(); render();
+}
+
+function updatePriorityStyle() {
+  const sel = document.getElementById('priority-sel');
+  const p = PRIORITIES[sel.value];
+  sel.style.background = p.bg;
+  sel.style.color = p.color;
+  sel.style.fontWeight = '600';
+}
+
+function isOverdue(due, done) {
+  if (!due||done) return false;
+  return new Date(due) < new Date(new Date().toDateString());
+}
+
+function formatDate(d) {
+  if (!d) return '';
+  const [y,m,day] = d.split('-');
+  return `${day}/${m}/${y}`;
+}
+
+function render() {
+  const fd = document.getElementById('f-done').value;
+  const fp = document.getElementById('f-priority').value;
+  const fc = document.getElementById('f-category').value;
+
+  let visible = tasks.filter(t => {
+    if (fp!=='todas' && t.priority!==fp) return false;
+    if (fc!=='todas' && t.category!==fc) return false;
+    if (fd==='pendientes' && t.done) return false;
+    if (fd==='completadas' && !t.done) return false;
+    return true;
+  }).sort((a,b) => {
+    const po={alta:0,media:1,baja:2};
+    if (po[a.priority]!==po[b.priority]) return po[a.priority]-po[b.priority];
+    if (a.due&&b.due) return a.due.localeCompare(b.due);
+    if (a.due) return -1; if (b.due) return 1;
+    return 0;
+  });
+
+  const pending = tasks.filter(t=>!t.done).length;
+  document.getElementById('subtitle').textContent =
+    `${pending} pendiente${pending!==1?'s':''} · ${tasks.length} total`;
+  document.getElementById('clear-btn').style.display =
+    tasks.some(t=>t.done) ? 'inline-block' : 'none';
+
+  const list = document.getElementById('task-list');
+  if (visible.length===0) {
+    list.innerHTML = `<div class="empty">${tasks.length===0?'¡Añade tu primera tarea! 🎯':'No hay tareas con estos filtros.'}</div>`;
+    return;
+  }
+
+  list.innerHTML = visible.map(t => {
+    const p = PRIORITIES[t.priority];
+    const ov = isOverdue(t.due, t.done);
+    return `<div class="task${t.done?' done':''}${ov?' overdue':''}">
+      <input type="checkbox" ${t.done?'checked':''} onchange="toggleTask(${t.id})" style="accent-color:${p.color}"/>
+      <div class="task-body">
+        <div class="task-text${t.done?' done':''}">${t.text}</div>
+        <div class="task-meta">
+          <span class="tag" style="background:${p.bg};color:${p.color}">${p.label}</span>
+          <span class="tag" style="background:${(CAT_COLORS[t.category]||'#6b7280')}20;color:${CAT_COLORS[t.category]||'#6b7280'}">${t.category}</span>
+          ${t.due?`<span style="font-size:.72rem;color:${ov?'#ef4444':'#64748b'};font-weight:${ov?700:400}">${ov?'⚠️ ':'📅 '}${formatDate(t.due)}</span>`:''}
+        </div>
+      </div>
+      <div class="task-actions">
+        <button onclick="startEdit(${t.id})" title="Editar">✏️</button>
+        <button onclick="deleteTask(${t.id})" title="Eliminar">🗑</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+updatePriorityStyle();
+</script>
+</body>
+</html>
