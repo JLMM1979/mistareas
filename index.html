@@ -81,9 +81,14 @@
         <input type="date" id="due-input"/>
         <button id="alarm-btn" onclick="toggleAlarm()" title="Activar aviso por email"
           style="padding:.5rem .7rem;border-radius:8px;border:1px solid #cbd5e1;background:#f8fafc;cursor:pointer;font-size:1rem">🔔</button>
-        <input type="number" id="alarm-days" min="0" max="30" value="1"
-          style="width:60px;padding:.5rem;border-radius:8px;border:1px solid #cbd5e1;font-size:.85rem;display:none" title="Días de antelación"/>
-        <span id="alarm-label" style="font-size:.78rem;color:#64748b;display:none;align-self:center">días antes</span>
+        <input type="number" id="alarm-amount" min="1" max="999" value="1"
+          style="width:60px;padding:.5rem;border-radius:8px;border:1px solid #cbd5e1;font-size:.85rem;display:none"/>
+        <select id="alarm-unit" style="padding:.5rem;border-radius:8px;border:1px solid #cbd5e1;font-size:.85rem;display:none">
+          <option value="m">min</option>
+          <option value="h">horas</option>
+          <option value="d" selected>días</option>
+        </select>
+        <span id="alarm-label" style="font-size:.78rem;color:#64748b;display:none;align-self:center">antes</span>
       </div>
       <div class="btn-row">
         <button class="btn-primary" id="submit-btn" onclick="addOrEdit()">➕ Añadir tarea</button>
@@ -147,11 +152,13 @@ emailjs.init(EMAILJS_PUBLIC);
 function toggleAlarm() {
   alarmActive = !alarmActive;
   const btn = document.getElementById('alarm-btn');
-  const days = document.getElementById('alarm-days');
+  const amount = document.getElementById('alarm-amount');
+  const unit = document.getElementById('alarm-unit');
   const label = document.getElementById('alarm-label');
   btn.style.background = alarmActive ? '#fef9c3' : '#f8fafc';
   btn.style.borderColor = alarmActive ? '#f59e0b' : '#cbd5e1';
-  days.style.display = alarmActive ? 'block' : 'none';
+  amount.style.display = alarmActive ? 'block' : 'none';
+  unit.style.display = alarmActive ? 'block' : 'none';
   label.style.display = alarmActive ? 'inline' : 'none';
 }
 
@@ -252,12 +259,16 @@ async function saveTasks() {
 }
 
 async function checkAlarms() {
-  const today = new Date(new Date().toDateString());
+  const now = new Date();
   const toNotify = tasks.filter(t => {
-    if (t.done || !t.due || t.alarm === null || t.alarm === undefined || t.alarmSent) return false;
+    if (t.done || !t.due || !t.alarm || t.alarmSent) return false;
     const due = new Date(t.due);
-    const diffDays = Math.round((due - today) / (1000*60*60*24));
-    return diffDays <= t.alarm && diffDays >= 0;
+    const diffMs = due - now;
+    if (diffMs < 0) return false;
+    const thresholdMs = t.alarm.unit === 'm' ? t.alarm.amount * 60000
+                      : t.alarm.unit === 'h' ? t.alarm.amount * 3600000
+                      : t.alarm.amount * 86400000;
+    return diffMs <= thresholdMs;
   });
   for (const t of toNotify) {
     try {
@@ -280,7 +291,10 @@ function addOrEdit() {
   const priority = document.getElementById('priority-sel').value;
   const category = document.getElementById('category-sel').value;
   const due = document.getElementById('due-input').value;
-  const alarm = alarmActive && due ? parseInt(document.getElementById('alarm-days').value) : null;
+  const alarm = alarmActive && due ? {
+    amount: parseInt(document.getElementById('alarm-amount').value),
+    unit: document.getElementById('alarm-unit').value
+  } : null;
 
   if (editId !== null) {
     tasks = tasks.map(t => t.id===editId ? {...t,text,priority,category,due,alarm} : t);
@@ -395,7 +409,7 @@ function render() {
           <span class="tag" style="background:${p.bg};color:${p.color}">${p.label}</span>
           <span class="tag" style="background:${(CAT_COLORS[t.category]||'#6b7280')}20;color:${CAT_COLORS[t.category]||'#6b7280'}">${t.category}</span>
           ${t.due?`<span style="font-size:.72rem;color:${ov?'#ef4444':'#64748b'};font-weight:${ov?700:400}">${ov?'⚠️ ':'📅 '}${formatDate(t.due)}</span>`:''}
-          ${t.alarm!==null&&t.alarm!==undefined?`<span style="font-size:.72rem;color:#f59e0b">🔔 ${t.alarm}d antes</span>`:''}
+          ${t.alarm?`<span style="font-size:.72rem;color:#f59e0b">🔔 ${t.alarm.amount}${t.alarm.unit==='m'?'min':t.alarm.unit==='h'?'h':'d'} antes</span>`:''}
         </div>
       </div>
       <div class="task-actions">
