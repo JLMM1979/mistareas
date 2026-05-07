@@ -79,6 +79,7 @@
           <option>Otros</option>
         </select>
         <input type="date" id="due-input"/>
+        <input type="time" id="due-time" style="padding:.5rem;border-radius:8px;border:1px solid #cbd5e1;font-size:.85rem"/>
         <button id="alarm-btn" onclick="toggleAlarm()" title="Activar aviso por email"
           style="padding:.5rem .7rem;border-radius:8px;border:1px solid #cbd5e1;background:#f8fafc;cursor:pointer;font-size:1rem">🔔</button>
         <input type="number" id="alarm-amount" min="1" max="999" value="1"
@@ -262,7 +263,7 @@ async function checkAlarms() {
   const now = new Date();
   const toNotify = tasks.filter(t => {
     if (t.done || !t.due || !t.alarm || t.alarmSent) return false;
-    const due = new Date(t.due);
+    const due = new Date(`${t.due}T${t.dueTime||'00:00'}`);
     const diffMs = due - now;
     if (diffMs < 0) return false;
     const thresholdMs = t.alarm.unit === 'm' ? t.alarm.amount * 60000
@@ -274,7 +275,7 @@ async function checkAlarms() {
     try {
       await emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, {
         tarea: t.text,
-        fecha: formatDate(t.due),
+        fecha: `${formatDate(t.due)} ${t.dueTime||''}`.trim(),
         categoria: t.category,
         prioridad: t.priority,
         url: APP_URL,
@@ -291,21 +292,23 @@ function addOrEdit() {
   const priority = document.getElementById('priority-sel').value;
   const category = document.getElementById('category-sel').value;
   const due = document.getElementById('due-input').value;
+  const dueTime = document.getElementById('due-time').value || '00:00';
   const alarm = alarmActive && due ? {
     amount: parseInt(document.getElementById('alarm-amount').value),
     unit: document.getElementById('alarm-unit').value
   } : null;
 
   if (editId !== null) {
-    tasks = tasks.map(t => t.id===editId ? {...t,text,priority,category,due,alarm} : t);
+    tasks = tasks.map(t => t.id===editId ? {...t,text,priority,category,due,dueTime,alarm} : t);
     editId = null;
     document.getElementById('submit-btn').textContent = '➕ Añadir tarea';
     document.getElementById('cancel-btn').style.display = 'none';
   } else {
-    tasks.push({ id: Date.now(), text, priority, category, due, alarm, done:false, created:new Date().toISOString(), alarmSent:false });
+    tasks.push({ id: Date.now(), text, priority, category, due, dueTime, alarm, done:false, created:new Date().toISOString(), alarmSent:false });
   }
   document.getElementById('task-input').value = '';
   document.getElementById('due-input').value = '';
+  document.getElementById('due-time').value = '';
   alarmActive = false;
   toggleAlarm(); toggleAlarm(); // reset visual
   saveTasks(); render();
@@ -337,6 +340,7 @@ function startEdit(id) {
   document.getElementById('priority-sel').value = t.priority;
   document.getElementById('category-sel').value = t.category;
   document.getElementById('due-input').value = t.due||'';
+  document.getElementById('due-time').value = t.dueTime||'';
   document.getElementById('submit-btn').textContent = '✏️ Guardar cambios';
   document.getElementById('cancel-btn').style.display = 'inline-block';
   document.getElementById('task-input').focus();
@@ -408,7 +412,7 @@ function render() {
         <div class="task-meta">
           <span class="tag" style="background:${p.bg};color:${p.color}">${p.label}</span>
           <span class="tag" style="background:${(CAT_COLORS[t.category]||'#6b7280')}20;color:${CAT_COLORS[t.category]||'#6b7280'}">${t.category}</span>
-          ${t.due?`<span style="font-size:.72rem;color:${ov?'#ef4444':'#64748b'};font-weight:${ov?700:400}">${ov?'⚠️ ':'📅 '}${formatDate(t.due)}</span>`:''}
+          ${t.due?`<span style="font-size:.72rem;color:${ov?'#ef4444':'#64748b'};font-weight:${ov?700:400}">${ov?'⚠️ ':'📅 '}${formatDate(t.due)}${t.dueTime?' '+t.dueTime:''}</span>`:''}
           ${t.alarm?`<span style="font-size:.72rem;color:#f59e0b">🔔 ${t.alarm.amount}${t.alarm.unit==='m'?'min':t.alarm.unit==='h'?'h':'d'} antes</span>`:''}
         </div>
       </div>
