@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Mis Tareas</title>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:'Segoe UI',sans-serif;background:#f1f5f9;min-height:100vh;padding:1.5rem 1rem}
@@ -19,7 +20,7 @@
   .card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:1rem;margin-bottom:1rem;box-shadow:0 1px 4px rgba(0,0,0,.06)}
   .form-row{display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap}
   .form-row input[type=text]{flex:1;min-width:160px;padding:.5rem .75rem;border-radius:8px;border:1px solid #cbd5e1;font-size:.95rem;outline:none}
-  .form-row input[type=date],select{padding:.5rem;border-radius:8px;border:1px solid #cbd5e1;font-size:.85rem}
+  .form-row input[type=date],.form-row input[type=number],select{padding:.5rem;border-radius:8px;border:1px solid #cbd5e1;font-size:.85rem}
   .btn-row{display:flex;gap:8px}
   .btn-primary{flex:1;padding:.5rem;border-radius:8px;border:none;background:#3b82f6;color:#fff;font-weight:600;cursor:pointer;font-size:.9rem}
   .btn-secondary{padding:.5rem 1rem;border-radius:8px;border:1px solid #cbd5e1;background:#f8fafc;cursor:pointer;font-size:.9rem}
@@ -69,10 +70,20 @@
           <option value="baja">Baja</option>
         </select>
         <select id="category-sel">
-          <option>Personal</option><option>Trabajo</option><option>Docencia</option>
-          <option>Arquitectura</option><option>Máster</option><option>Novela</option><option>Otro</option>
+          <option>Personal</option>
+          <option>Docencia</option>
+          <option>Arquitectura</option>
+          <option>Novela</option>
+          <option>Artículos</option>
+          <option>Estudios</option>
+          <option>Otros</option>
         </select>
         <input type="date" id="due-input"/>
+        <button id="alarm-btn" onclick="toggleAlarm()" title="Activar aviso por email"
+          style="padding:.5rem .7rem;border-radius:8px;border:1px solid #cbd5e1;background:#f8fafc;cursor:pointer;font-size:1rem">🔔</button>
+        <input type="number" id="alarm-days" min="0" max="30" value="1"
+          style="width:60px;padding:.5rem;border-radius:8px;border:1px solid #cbd5e1;font-size:.85rem;display:none" title="Días de antelación"/>
+        <span id="alarm-label" style="font-size:.78rem;color:#64748b;display:none;align-self:center">días antes</span>
       </div>
       <div class="btn-row">
         <button class="btn-primary" id="submit-btn" onclick="addOrEdit()">➕ Añadir tarea</button>
@@ -94,8 +105,13 @@
       </select>
       <select id="f-category" onchange="render()">
         <option value="todas">Todas las categorías</option>
-        <option>Personal</option><option>Trabajo</option><option>Docencia</option>
-        <option>Arquitectura</option><option>Máster</option><option>Novela</option><option>Otro</option>
+        <option>Personal</option>
+        <option>Docencia</option>
+        <option>Arquitectura</option>
+        <option>Novela</option>
+        <option>Artículos</option>
+        <option>Estudios</option>
+        <option>Otros</option>
       </select>
       <button class="btn-clear" id="clear-btn" style="display:none" onclick="clearDone()">🗑 Limpiar completadas</button>
     </div>
@@ -108,6 +124,11 @@
 const CLIENT_ID = '957915120062-0flngfor6pe00cneuqh0k1rpg4ed9j7f.apps.googleusercontent.com';
 const SCOPES = 'https://www.googleapis.com/auth/drive.appdata';
 const FILE_NAME = 'tareas_jlmm.json';
+const EMAILJS_SERVICE = 'service_fbj3lxc';
+const EMAILJS_TEMPLATE = 'template_hpfqkbq';
+const EMAILJS_PUBLIC = 'Qz8HoKk_MRqmeLv_O';
+const USER_EMAIL = 'jlmallebrera@gmail.com';
+const APP_URL = 'https://mistareasjlmm.netlify.app';
 
 const PRIORITIES = {
   alta:  {label:'Alta',  color:'#ef4444', bg:'#fef2f2'},
@@ -115,11 +136,24 @@ const PRIORITIES = {
   baja:  {label:'Baja',  color:'#22c55e', bg:'#f0fdf4'},
 };
 const CAT_COLORS = {
-  Personal:'#8b5cf6',Trabajo:'#3b82f6',Docencia:'#f59e0b',
-  Arquitectura:'#ef4444','Máster':'#14b8a6',Novela:'#ec4899',Otro:'#6b7280'
+  Personal:'#8b5cf6', Docencia:'#f59e0b', Arquitectura:'#ef4444',
+  Novela:'#ec4899', Artículos:'#3b82f6', Estudios:'#14b8a6', Otros:'#6b7280'
 };
 
-let tokenClient, accessToken, tasks=[], fileId=null, editId=null;
+let tokenClient, accessToken, tasks=[], fileId=null, editId=null, alarmActive=false;
+
+emailjs.init(EMAILJS_PUBLIC);
+
+function toggleAlarm() {
+  alarmActive = !alarmActive;
+  const btn = document.getElementById('alarm-btn');
+  const days = document.getElementById('alarm-days');
+  const label = document.getElementById('alarm-label');
+  btn.style.background = alarmActive ? '#fef9c3' : '#f8fafc';
+  btn.style.borderColor = alarmActive ? '#f59e0b' : '#cbd5e1';
+  days.style.display = alarmActive ? 'block' : 'none';
+  label.style.display = alarmActive ? 'inline' : 'none';
+}
 
 function signIn() {
   tokenClient = google.accounts.oauth2.initTokenClient({
@@ -186,6 +220,7 @@ async function loadTasks() {
     }
     setStatus('ready');
     render();
+    checkAlarms();
   } catch(e) { setStatus('error'); console.error(e); }
 }
 
@@ -216,22 +251,49 @@ async function saveTasks() {
   } catch(e) { setStatus('error'); console.error(e); }
 }
 
+async function checkAlarms() {
+  const today = new Date(new Date().toDateString());
+  const toNotify = tasks.filter(t => {
+    if (t.done || !t.due || t.alarm === null || t.alarm === undefined || t.alarmSent) return false;
+    const due = new Date(t.due);
+    const diffDays = Math.round((due - today) / (1000*60*60*24));
+    return diffDays <= t.alarm && diffDays >= 0;
+  });
+  for (const t of toNotify) {
+    try {
+      await emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, {
+        tarea: t.text,
+        fecha: formatDate(t.due),
+        categoria: t.category,
+        prioridad: t.priority,
+        url: APP_URL,
+      });
+      t.alarmSent = true;
+    } catch(e) { console.error('Error email:', e); }
+  }
+  if (toNotify.length > 0) saveTasks();
+}
+
 function addOrEdit() {
   const text = document.getElementById('task-input').value.trim();
   if (!text) return;
   const priority = document.getElementById('priority-sel').value;
   const category = document.getElementById('category-sel').value;
   const due = document.getElementById('due-input').value;
+  const alarm = alarmActive && due ? parseInt(document.getElementById('alarm-days').value) : null;
+
   if (editId !== null) {
-    tasks = tasks.map(t => t.id===editId ? {...t,text,priority,category,due} : t);
+    tasks = tasks.map(t => t.id===editId ? {...t,text,priority,category,due,alarm} : t);
     editId = null;
     document.getElementById('submit-btn').textContent = '➕ Añadir tarea';
     document.getElementById('cancel-btn').style.display = 'none';
   } else {
-    tasks.push({ id: Date.now(), text, priority, category, due, done:false, created:new Date().toISOString() });
+    tasks.push({ id: Date.now(), text, priority, category, due, alarm, done:false, created:new Date().toISOString(), alarmSent:false });
   }
   document.getElementById('task-input').value = '';
   document.getElementById('due-input').value = '';
+  alarmActive = false;
+  toggleAlarm(); toggleAlarm(); // reset visual
   saveTasks(); render();
   document.getElementById('task-input').focus();
 }
@@ -328,11 +390,12 @@ function render() {
     return `<div class="task${t.done?' done':''}${ov?' overdue':''}">
       <input type="checkbox" ${t.done?'checked':''} onchange="toggleTask(${t.id})" style="accent-color:${p.color}"/>
       <div class="task-body">
-        <div class="task-text${t.done?' done':''}">${t.text}</div>
+        <div class="task-text${t.done?' done':''}">${t.text}${t.alarm!==null&&t.alarm!==undefined?' 🔔':''}</div>
         <div class="task-meta">
           <span class="tag" style="background:${p.bg};color:${p.color}">${p.label}</span>
           <span class="tag" style="background:${(CAT_COLORS[t.category]||'#6b7280')}20;color:${CAT_COLORS[t.category]||'#6b7280'}">${t.category}</span>
           ${t.due?`<span style="font-size:.72rem;color:${ov?'#ef4444':'#64748b'};font-weight:${ov?700:400}">${ov?'⚠️ ':'📅 '}${formatDate(t.due)}</span>`:''}
+          ${t.alarm!==null&&t.alarm!==undefined?`<span style="font-size:.72rem;color:#f59e0b">🔔 ${t.alarm}d antes</span>`:''}
         </div>
       </div>
       <div class="task-actions">
